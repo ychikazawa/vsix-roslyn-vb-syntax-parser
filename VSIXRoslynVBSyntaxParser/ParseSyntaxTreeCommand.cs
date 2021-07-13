@@ -1,8 +1,14 @@
-﻿using Microsoft.VisualStudio.Shell;
+﻿using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.VisualBasic.Syntax;
+using Microsoft.VisualStudio.ComponentModelHost;
+using Microsoft.VisualStudio.LanguageServices;
+using Microsoft.VisualStudio.Shell;
 using Microsoft.VisualStudio.Shell.Interop;
 using System;
+using System.Collections.Generic;
 using System.ComponentModel.Design;
 using System.Globalization;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Task = System.Threading.Tasks.Task;
@@ -89,17 +95,61 @@ namespace VSIXRoslynVBSyntaxParser
         private void Execute(object sender, EventArgs e)
         {
             ThreadHelper.ThrowIfNotOnUIThread();
-            string message = string.Format(CultureInfo.CurrentCulture, "Inside {0}.MenuItemCallback()", this.GetType().FullName);
-            string title = "ParseSyntaxTreeCommand";
 
-            // Show a message box to prove we were here
-            VsShellUtilities.ShowMessageBox(
-                this.package,
-                message,
-                title,
-                OLEMSGICON.OLEMSGICON_INFO,
-                OLEMSGBUTTON.OLEMSGBUTTON_OK,
-                OLEMSGDEFBUTTON.OLEMSGDEFBUTTON_FIRST);
+            var componentModel = (IComponentModel)Package.GetGlobalService(typeof(SComponentModel));
+            var workspace = (Workspace)componentModel.GetService<VisualStudioWorkspace>();
+
+            // Get documents in target project
+            var documents = from project in workspace.CurrentSolution.Projects
+                            from document in project.Documents
+                            select document;
+
+            foreach (var document in documents)
+            {
+                string title = document.Name;    
+                var variables = new List<string>();
+                var methodParameters = new List<string>();
+
+                SyntaxTree syntaxTree = document.GetSyntaxTreeAsync().Result;
+                SyntaxNode syntaxRoot = syntaxTree.GetRoot();
+                var nodes = syntaxRoot.DescendantNodes();
+
+                // Get classes
+                foreach (var classSyntax in nodes.OfType<ClassBlockSyntax>())
+                {
+                    // Get variables
+                    foreach (var fieldSyntax in classSyntax.Members.OfType<FieldDeclarationSyntax>())
+                    {
+                        var name = fieldSyntax.Declarators.First().Names;
+                        var kind = fieldSyntax.Kind();
+                        var type = fieldSyntax.Declarators.First().AsClause;
+                        variables.Add($"Name: {name}, Kind: {kind}, Type: {type}");
+                    }
+
+                    // Get methods
+                    foreach (var methodSyntax in classSyntax.Members.OfType<MethodBlockSyntax>())
+                    {
+                        MethodStatementSyntax methodStatement = methodSyntax.ChildNodes().First(x => x is MethodStatementSyntax) as MethodStatementSyntax;
+                        foreach (var parameterSyntax in methodStatement.ParameterList.Parameters)
+                        {
+                            var name = parameterSyntax.Identifier;
+                            var kind = parameterSyntax.Kind();
+                            var type = parameterSyntax.AsClause;
+                            methodParameters.Add($"Name: {name}, Kind: {kind}, Type: {type}");
+                        }
+                    }
+                }
+                // Show a message box to prove we were here
+                VsShellUtilities.ShowMessageBox(
+                    this.package,
+                    $"variables: \n{string.Join(",\n", variables)}, \n" +
+                    $"methodParams: \n{string.Join(",\n", methodParameters)}",
+                    title,
+                    OLEMSGICON.OLEMSGICON_INFO,
+                    OLEMSGBUTTON.OLEMSGBUTTON_OK,
+                    OLEMSGDEFBUTTON.OLEMSGDEFBUTTON_FIRST);
+            }
+
         }
     }
 }
