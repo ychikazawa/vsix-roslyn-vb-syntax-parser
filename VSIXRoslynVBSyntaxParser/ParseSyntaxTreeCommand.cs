@@ -139,10 +139,12 @@ namespace VSIXRoslynVBSyntaxParser
                         }
                     }
                 }
+                if (variables.Count() == 0 || methodParameters.Count() == 0) continue;
+
                 // Show a message box to prove we were here
                 VsShellUtilities.ShowMessageBox(
                     this.package,
-                    $"variables: \n{string.Join(",\n", variables)}, \n" +
+                    $"variables: \n{string.Join(",\n", variables)} \n\n" +
                     $"methodParams: \n{string.Join(",\n", methodParameters)}",
                     title,
                     OLEMSGICON.OLEMSGICON_INFO,
